@@ -61,7 +61,6 @@
   version = "v0.0.3"
 
 [[projects]]
-  branch = "master"
   name = "github.com/mrjones/oauth"
   packages = ["."]
   revision = "3f67d9c274355678b2f9844b08d643e2f9213340"
@@ -73,10 +72,10 @@
   revision = "2643cc319ff871b0d9e3838248edab5899397bc7"
 
 [[projects]]
-  branch = "godep"
+  branch = "master"
   name = "github.com/requilence/integram"
   packages = ["."]
-  revision = "75362eb462869b110ffb57e17553bd16cbe5b1fe"
+  revision = "56eda09aa5a3f57500e764738fd04eca7b9b04e9"
 
 [[projects]]
   branch = "master"
@@ -175,6 +174,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "052aa13353f2a4e26f7b967d5900ceab0ba560fa535f77dfca82ad73379720c8"
+  inputs-digest = "41a18ef0413dbb2dd40b28827034691206d8238a25b106519d679d65561bc404"
   solver-name = "gps-cdcl"
   solver-version = 1

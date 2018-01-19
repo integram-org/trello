@@ -3,6 +3,10 @@ Trello integration for Telegram
 
 This integration is the part of [Integram](https://github.com/requilence/integram) – framework and platform for integrating services into Telegram.
 
+[![Docker Image](https://img.shields.io/docker/build/integram/trello.svg)](https://hub.docker.com/r/integram/trello/) [![GoDoc](https://godoc.org/github.com/integram-org/trello?status.svg)](https://godoc.org/github.com/integram-org/trello)
+
+![Screencast](https://st.integram.org/img/screencast4.gif)
+
 To start using Trello bot just write to [@trello_bot](https://t.me/trello_bot) on Telegram.
 
 In case you want to deploy this on your own server please refer to the [Integram README](https://github.com/requilence/integram)
