@@ -25,5 +25,9 @@
   name = "github.com/requilence/integram"
 
 [[constraint]]
+  branch = "master"
+  name = "github.com/requilence/decent"
+
+[[constraint]]
   revision = "d939ba741945c047cac69c329c5fb0d6b4a06520"
   name = "github.com/jinzhu/now"

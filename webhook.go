@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/requilence/integram"
-	"github.com/requilence/integram/decent"
+	"github.com/requilence/decent"
 	t "github.com/integram-org/trello/api"
-	iurl "github.com/requilence/integram/url"
+	iurl "github.com/requilence/url"
 	tg "github.com/requilence/telegram-bot-api"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/mgo.v2/bson"

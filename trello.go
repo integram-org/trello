@@ -15,7 +15,7 @@ import (
 	"net/http"
 	"net/url"
 
-	iurl "github.com/requilence/integram/url"
+	iurl "github.com/requilence/url"
 
 	"regexp"
 
@@ -31,7 +31,7 @@ import (
 	"github.com/jinzhu/now"
 	"github.com/mrjones/oauth"
 	"github.com/requilence/integram"
-	"github.com/requilence/integram/decent"
+	"github.com/requilence/decent"
 	tg "github.com/requilence/telegram-bot-api"
 )
 

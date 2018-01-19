@@ -67,10 +67,16 @@
   revision = "3f67d9c274355678b2f9844b08d643e2f9213340"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/requilence/decent"
+  packages = ["."]
+  revision = "2643cc319ff871b0d9e3838248edab5899397bc7"
+
+[[projects]]
   branch = "godep"
   name = "github.com/requilence/integram"
-  packages = [".","decent","url"]
-  revision = "9be4edd6083f8bb5f6bff7c4aedd3d57b1b6f9a8"
+  packages = ["."]
+  revision = "75362eb462869b110ffb57e17553bd16cbe5b1fe"
 
 [[projects]]
   branch = "master"
@@ -83,6 +89,12 @@
   name = "github.com/requilence/telegram-bot-api"
   packages = ["."]
   revision = "ce2732e6d01f85faca1809cf150d1e90fd1ad2fd"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/requilence/url"
+  packages = ["."]
+  revision = "6fc4fc0c65da72e95d19a8e5056e222a4f12357f"
 
 [[projects]]
   name = "github.com/sirupsen/logrus"
@@ -103,13 +115,11 @@
   revision = "9831f2c3ac1068a78f50999a30db84270f647af6"
 
 [[projects]]
-  branch = "master"
   name = "github.com/vova616/xxhash"
   packages = ["."]
   revision = "f0a9a8b74d487f9563a527daf3bd6b4fbd3f5d00"
 
 [[projects]]
-  branch = "master"
   name = "github.com/weekface/mgorus"
   packages = ["."]
   revision = "83720e22971a8301c5b2738c9364accd3d9eb13a"
@@ -130,13 +140,13 @@
   branch = "master"
   name = "golang.org/x/oauth2"
   packages = [".","internal"]
-  revision = "30785a2c434e431ef7c507b54617d6a951d5f2b4"
+  revision = "b28fcf2b08a19742b43084fb40ab78ac6c3d8067"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix","windows"]
-  revision = "810d7000345868fc619eb81f46307107118f4ae1"
+  revision = "2c42eef0765b9837fbdab12011af7830f55f88f0"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -165,6 +175,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "5006b82d6958aae656ea2e08afe975b11184a4b5f5680999769c6449ea544095"
+  inputs-digest = "052aa13353f2a4e26f7b967d5900ceab0ba560fa535f77dfca82ad73379720c8"
   solver-name = "gps-cdcl"
   solver-version = 1
