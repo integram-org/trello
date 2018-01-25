@@ -924,6 +924,11 @@ func boardToIntegrateSelected(c *integram.Context) error {
 		boards, _ := boards(c, api(c))
 		board := boardsFilterByID(boards, boardID)
 
+		if board == nil {
+			c.Log().Errorf("boardToIntegrateSelected, boardsFilterByID returned nil (id=%s, len(boards)=%d)", boardID, len(boards))
+			return errors.New("board with id not found")
+		}
+
 		return scheduleSubscribeIfBoardNotAlreadyExists(c, board, c.Chat.ID)
 	}
 	but := integram.Buttons{}
@@ -1141,7 +1146,8 @@ func inlineCardButtonPressed(c *integram.Context, cardID string) error {
 		if c.User.IsPrivateStarted() {
 			c.AnswerCallbackQuery("Open the private chat with Trello", false)
 			c.User.SetCache("auth_redirect", true, time.Hour*24)
-			c.NewMessage().EnableAntiFlood().SetTextFmt("You need to authorize me in order to use Trello bot: %s", c.User.OauthInitURL()).SetChat(c.User.ID).Send()
+			redirectURL := fmt.Sprintf("%s/tz?r=%s", integram.Config.BaseURL, url.QueryEscape(fmt.Sprintf("/oauth1/%s/%s", c.ServiceName, c.User.AuthTempToken())))
+			c.NewMessage().EnableAntiFlood().SetTextFmt("You need to authorize me in order to use Trello bot: %s", redirectURL).SetChat(c.User.ID).Send()
 		} else {
 			kb := c.Callback.Message.InlineKeyboardMarkup
 			kb.AddPMSwitchButton(c.Bot(), "👉  Tap me to auth", "auth")
@@ -2394,7 +2400,7 @@ func newMessageHandler(c *integram.Context) error {
 		}
 		return c.NewMessage().
 			HideKeyboard().
-			SetTextFmt("Hi human! Let's get some juicy Trello in the Telegram. Open this link to authorize me: %s", c.User.OauthInitURL()).
+			SetTextFmt("Hi human! Let's get some juicy Trello in the Telegram. Open this link to authorize me: %s", oauthRedirectURL(c)).
 			Send()
 
 	case "reauthorize":
@@ -2404,7 +2410,7 @@ func newMessageHandler(c *integram.Context) error {
 		c.User.SetCache("cards", nil, time.Second)
 
 		return c.NewMessage().
-			SetTextFmt("Open this link to authorize me: %s", c.User.OauthInitURL()).
+			SetTextFmt("Open this link to authorize me: %s", oauthRedirectURL(c)).
 			SetChat(c.User.ID).
 			Send()
 	case "connect", "boards":
@@ -2417,7 +2423,7 @@ func newMessageHandler(c *integram.Context) error {
 			c.User.SaveSetting("TargetChat", c.Chat)
 		}
 		return c.NewMessage().
-			SetTextFmt("Open this link to authorize me: %s", c.User.OauthInitURL()).
+			SetTextFmt("Open this link to authorize me: %s", oauthRedirectURL(c)).
 			SetChat(c.User.ID).
 			Send()
 	case "migrate":
@@ -2486,4 +2492,8 @@ func migrateWebhooks(c *integram.Context) error {
 	c.Log().Warnf("%d users migrated, %d errors", migrated, errorsCount)
 
 	return nil
+}
+
+func oauthRedirectURL(c *integram.Context) string{
+	return fmt.Sprintf("%s/tz?r=%s", integram.Config.BaseURL, url.QueryEscape(fmt.Sprintf("/oauth1/%s/%s", c.ServiceName, c.User.AuthTempToken())))
 }
