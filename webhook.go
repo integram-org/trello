@@ -195,7 +195,7 @@ func cleanDesc(desc string) string {
 	}
 	a := strings.Split(desc, "---\n")
 
-	return strings.Trim(a[0], "\n\t\r ")
+	return m.EncodeEntities(strings.Trim(a[0], "\n\t\r "))
 }
 func webhookHandler(c *integram.Context, wc *integram.WebhookContext) (err error) {
 	u, _ := iurl.Parse("https://trello.com")

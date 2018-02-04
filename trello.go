@@ -1032,10 +1032,10 @@ func cardText(c *integram.Context, card *t.Card) string {
 	}
 	by := ""
 	if card.MemberCreator != nil {
-		by = card.MemberCreator.FullName
+		by = m.EncodeEntities(card.MemberCreator.FullName)
 	}
 
-	text += card.Name + " " + m.URL("➔", c.WebPreview("by "+by, cardPath(card), "", card.URL(), ""))
+	text += m.EncodeEntities(card.Name) + " " + m.URL("➔", c.WebPreview("by "+by, cardPath(card), "", card.URL(), ""))
 
 	if card.Desc != "" {
 		// todo: replace markdown in desc with html?
