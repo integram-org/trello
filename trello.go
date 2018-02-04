@@ -45,7 +45,6 @@ type Config struct {
 
 var defaultBoardFilter = ChatBoardFilterSettings{CardCreated: true, CardCommented: true, CardMoved: true, PersonAssigned: true, Archived: true, Due: true}
 
-const errorWebhookExists = "400 Bad Request: A webhook with that callback, model, and token already exists"
 const markSign = "✅ "
 const dueDateFormat = "02.01 15:04"
 const dueDateFullFormat = "02.01.2006 15:04"
@@ -348,7 +347,6 @@ func boards(c *integram.Context, api *t.Client) ([]*t.Board, error) {
 	var boards []*t.Board
 
 	if exists := c.User.Cache("boards", &boards); exists {
-		fmt.Printf("Found boards in cache: %d boards, [0]=%v\n", len(boards), boards[0])
 		return boards, nil
 	}
 
@@ -660,18 +658,27 @@ func afterBoardIntegratedActionSelected(c *integram.Context) error {
 
 }
 
+func authWasRevokedMessage(c *integram.Context){
+	c.User.ResetOAuthToken()
+	c.NewMessage().EnableAntiFlood().SetTextFmt("Looks like you have revoked the Integram access. In order to use me you need to authorize again: %s", oauthRedirectURL(c)).SetChat(c.User.ID).Send()
+}
+
 func subscribeBoard(c *integram.Context, b *t.Board, chatID int64) error {
 	qp := url.Values{"description": {"Integram"}, "callbackURL": {c.User.ServiceHookURL()}, "idModel": {b.Id}}
 
 	res, err := api(c).Request("POST", "tokens/"+c.User.OAuthToken()+"/webhooks", nil, qp)
 	webhook := webhookInfo{}
 	if err != nil {
-		if err.Error() == errorWebhookExists {
+		if strings.Contains(err.Error(),"already exists") {
 			webhook, err = existsWebhookByBoard(c, b.Id)
 			if err != nil {
 				c.Log().WithError(err).WithField("boardID", b.Id).Error("Received ErrorWebhookExists but can't refetch")
 				return err
 			}
+		} else if strings.Contains(err.Error(), "401 Unauthorized"){
+			authWasRevokedMessage(c)
+			c.User.SetAfterAuthAction(subscribeBoard, c, b, chatID)
+			return nil
 		} else {
 			return err
 		}
@@ -954,14 +961,11 @@ func boardForCardSelected(c *integram.Context) error {
 	boardID, boardName := c.KeyboardAnswer()
 
 	lists, err := listsByBoardID(c, api(c), boardID)
-	fmt.Printf("%v %+v", err, lists)
 	if err != nil {
 		return err
 	}
 	but := integram.Buttons{}
 	for _, list := range lists {
-		fmt.Printf("%v\n", list.Name)
-
 		but.Append(list.Id, list.Name)
 	}
 
@@ -1652,7 +1656,6 @@ func cardSetDue(c *integram.Context, card *t.Card, date string) (string, error) 
 
 }
 func сardNameEntered(c *integram.Context, card *t.Card) error {
-	fmt.Printf("сardNameEntered card:%+v\n", card)
 	action, _ := c.KeyboardAnswer()
 	if action == "cancel" {
 		return c.NewMessage().SetText("Ok").HideKeyboard().Send()
@@ -1669,7 +1672,6 @@ func сardNameEntered(c *integram.Context, card *t.Card) error {
 }
 
 func сardDescEntered(c *integram.Context, card *t.Card) error {
-	fmt.Printf("сardDescEntered card:%+v\n", card)
 	action, _ := c.KeyboardAnswer()
 	if action == "cancel" {
 		return c.NewMessage().SetText("Ok").HideKeyboard().Send()
@@ -1686,12 +1688,10 @@ func сardDescEntered(c *integram.Context, card *t.Card) error {
 }
 
 func сardDueDateEntered(c *integram.Context, card *t.Card) error {
-	fmt.Printf("afterCardDueDateEntered card:%+v\n", card)
 	action, _ := c.KeyboardAnswer()
 	if action == "cancel" {
 		return c.NewMessage().SetText("Ok").HideKeyboard().Send()
 	}
-	fmt.Printf("tz: %+v\n", c.User.TzLocation())
 	if action == "" {
 		action = c.Message.Text
 	}
@@ -2208,7 +2208,6 @@ func inlineQueryHandler(c *integram.Context) error {
 	start, _ := strconv.Atoi(c.InlineQuery.Offset)
 
 	//cards=t.Cards
-	fmt.Printf("cards %d\n", len(d.Cards))
 	ci := 0
 	total := 0
 
@@ -2426,71 +2425,9 @@ func newMessageHandler(c *integram.Context) error {
 			SetTextFmt("Open this link to authorize me: %s", oauthRedirectURL(c)).
 			SetChat(c.User.ID).
 			Send()
-	case "migrate":
-		if c.User.ID != 858140 {
-			return nil
-		}
-		migrateWebhooks(c)
 	case "cancel", "clean", "reset":
 		return c.NewMessage().SetText("Clean").HideKeyboard().Send()
 	}
-	return nil
-}
-
-func migrateWebhooks(c *integram.Context) error {
-	users, err := c.FindUsers(bson.M{"protected.trello.oauthtoken":bson.M{"$exists":true, "$ne": ""}})
-	if err !=nil {
-		return err
-	}
-	i:=0
-	c.Log().Warnf("%d users to migrate", len(users))
-	migrated:=0
-	errorsCount:=0
-	for _, user := range users {
-		i++
-		if i % 100 == 0 {
-			c.Log().Warnf("%d users processed", i)
-		}
-		c.User = user.User
-		us := userSettings(c)
-
-		any := false
-		if us.Boards != nil {
-			uToken := c.User.OAuthToken()
-			for id, board := range us.Boards {
-				if board.TrelloWebhookID != "" {
-					//todo: make a job
-					qp := url.Values{"callbackURL": {c.User.ServiceHookURL()}}
-					webhook := webhookInfo{}
-
-					res, err := api(c).Request("PUT", "webhooks/"+board.TrelloWebhookID, nil, qp)
-					if err != nil {
-						c.Log().WithError(err).Error("migrateWebhooks")
-						errorsCount++
-					} else {
-						err = json.Unmarshal(res, &webhook)
-						if err != nil {
-							errorsCount++
-							c.Log().WithError(err).Error("migrateWebhooks")
-						} else {
-							migrated++
-							board.OAuthToken = uToken
-							board.TrelloWebhookID = webhook.ID
-							us.Boards[id] = board
-							any = true
-						}
-					}
-				}
-			}
-		}
-
-		if any {
-			c.User.SaveSettings(us)
-		}
-
-	}
-	c.Log().Warnf("%d users migrated, %d errors", migrated, errorsCount)
-
 	return nil
 }
 

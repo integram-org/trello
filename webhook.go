@@ -760,6 +760,11 @@ func commentCard(c *integram.Context, cardID string, text string) error {
 	b, err := api(c).Request("POST", "cards/"+cardID+"/actions/comments", nil, extra)
 
 	if err != nil {
+		if strings.Contains(err.Error(), "invalid token") {
+			authWasRevokedMessage(c)
+			c.User.SetAfterAuthAction(commentCard, c, cardID, text)
+			return nil
+		}
 		return err
 	}
 
