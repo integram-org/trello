@@ -556,6 +556,11 @@ func resubscribeAllBoards(c *integram.Context) error {
 func scheduleSubscribeIfBoardNotAlreadyExists(c *integram.Context, b *t.Board, chatID int64) error {
 	us := userSettings(c)
 
+	if b == nil {
+		c.Log().Error("scheduleSubscribeIfBoardNotAlreadyExists nil board")
+		return nil
+	}
+
 	if us.Boards != nil {
 		if val, exists := us.Boards[b.Id]; exists {
 			if val.OAuthToken == c.User.OAuthToken() {
@@ -666,7 +671,7 @@ func authWasRevokedMessage(c *integram.Context){
 func subscribeBoard(c *integram.Context, b *t.Board, chatID int64) error {
 	qp := url.Values{"description": {"Integram"}, "callbackURL": {c.User.ServiceHookURL()}, "idModel": {b.Id}}
 
-	res, err := api(c).Request("POST", "tokens/"+c.User.OAuthToken()+"/webhooks", nil, qp)
+	_, err := api(c).Request("POST", "tokens/"+c.User.OAuthToken()+"/webhooks", nil, qp)
 	webhook := webhookInfo{}
 	if err != nil {
 		if strings.Contains(err.Error(),"already exists") {
@@ -677,16 +682,24 @@ func subscribeBoard(c *integram.Context, b *t.Board, chatID int64) error {
 			}
 		} else if strings.Contains(err.Error(), "401 Unauthorized"){
 			authWasRevokedMessage(c)
-			c.User.SetAfterAuthAction(subscribeBoard, c, b, chatID)
+			c.User.SetAfterAuthAction(subscribeBoard, b, chatID)
 			return nil
 		} else {
 			return err
 		}
 	} else {
-		err = json.Unmarshal(res, &webhook)
-		if err != nil {
+
+		webhook, err = existsWebhookByBoard(c, b.Id)
+		if err != nil{
 			return err
 		}
+
+		// instead of checking the provided webhook lets query Trello to ensure it has a webhook for sure
+		// in some cases Trello provides webhook but doesn't actually store it
+		/*err = json.Unmarshal(res, &webhook)
+		if err != nil {
+			return err
+		}*/
 	}
 
 	return processWebhook(c, b, chatID, webhook.ID)
@@ -794,6 +807,24 @@ func renderBoardFilters(c *integram.Context, boardID string, keyboard *integram.
 }
 func storeCard(c *integram.Context, card *t.Card) {
 	c.SetServiceCache("card_"+card.Id, card, time.Hour*24*100)
+	var cards []*t.Card
+	c.User.Cache("cards", &cards)
+
+	alreadyExists := false
+	for _, cardR := range cards {
+		if cardR.Id == card.Id {
+			alreadyExists = true
+			break
+		}
+	}
+
+	if !alreadyExists {
+		err := c.User.UpdateCache("cards", bson.M{"$addToSet": bson.M{"val": card}}, &cards)
+		if err != nil {
+			c.Log().WithError(err).Errorf("Cards cache update error")
+		}
+	}
+
 }
 
 func getBoardFilterKeyboard(c *integram.Context, boardID string) *integram.Keyboard {
@@ -997,6 +1028,7 @@ func listForCardSelected(c *integram.Context, boardID string, boardName string) 
 	return c.NewMessage().
 		SetTextFmt("Enter the title. Card will be added to %s / %s ", m.Bold(boardName), m.Bold(listName)).
 		EnableHTML().
+		EnableForceReply().
 		HideKeyboard().
 		SetReplyAction(textForCardEntered, boardID, boardName, listID, listName).
 		Send()
@@ -1336,7 +1368,7 @@ func inlineCardButtonPressed(c *integram.Context, cardID string) error {
 		buts.Append(t.EndOfMonth().Format(dueDateFormat), "End of this month")
 		buts.Append(now.New(t.AddDate(0, 1, -1*t.Day()+3)).EndOfMonth().Format(dueDateFormat), "End of the next month")
 		buts.Append("due_manual", "Enter the date")
-		buts.Append("back", "←⃪⃪⃪ Back")
+		buts.Append("back", "← Back")
 
 		return c.EditPressedMessageTextAndInlineKeyboard(cardText(c, card), buts.Markup(1, "due"))
 
@@ -1362,7 +1394,7 @@ func inlineCardButtonPressed(c *integram.Context, cardID string) error {
 			return err
 		}
 
-		buts.Append("back", "←⃪⃪⃪ Back")
+		buts.Append("back", "← Back")
 
 		//c.Callback.Message.SetCallbackAction(inlineCardAssignButtonPressed, cardID)
 
@@ -1375,7 +1407,7 @@ func inlineCardButtonPressed(c *integram.Context, cardID string) error {
 			return err
 		}
 
-		buts.Append("back", "←⃪⃪⃪ Back")
+		buts.Append("back", "← Back")
 
 		kb := buts.Markup(1, "assign")
 		kb.FixedWidth = true
@@ -2045,6 +2077,17 @@ func inlineCardCreate(c *integram.Context, listID string) error {
 	if err != nil {
 		return err
 	}
+
+	c.ChosenInlineResult.Message.AddEventID("card_" + card.Id)
+	c.ChosenInlineResult.Message.SetCallbackAction(inlineCardButtonPressed, card.Id)
+	c.ChosenInlineResult.Message.SetReplyAction(cardReplied, card.Id)
+	//err = c.DeleteMessage(c.ChosenInlineResult.Message)
+	err = c.ChosenInlineResult.Message.Update(c.Db())
+	if err != nil {
+		c.Log().WithError(err).Errorf("DeleteMessage error")
+		return err
+	}
+
 	lists, err := listsByBoardID(c, api, card.IdBoard)
 	if err != nil {
 		return err
@@ -2064,14 +2107,7 @@ func inlineCardCreate(c *integram.Context, listID string) error {
 	card.MemberCreator = member
 
 	storeCard(c, card)
-	c.ChosenInlineResult.Message.AddEventID("card_" + card.Id)
-	c.ChosenInlineResult.Message.SetCallbackAction(inlineCardButtonPressed, card.Id)
-	c.ChosenInlineResult.Message.SetReplyAction(cardReplied, card.Id)
 
-	err = c.ChosenInlineResult.Message.Update(c.Db())
-	if err != nil {
-		return err
-	}
 	return c.EditMessageTextAndInlineKeyboard(c.ChosenInlineResult.Message, "", cardText(c, card), cardInlineKeyboard(card, false))
 
 }
@@ -2257,7 +2293,7 @@ func inlineQueryHandler(c *integram.Context) error {
 				Type:        "article",
 				Title:       card.Name,
 				Description: list.Name + " • " + board.Name,
-				ThumbURL:    "https://1153359166.rsc.cdn77.org/t/" + board.Prefs.Background + ".png",
+				ThumbURL:    "https://st.integram.org/trello/" + board.Prefs.Background + ".png",
 				InputMessageContent: tg.InputTextMessageContent{
 					ParseMode:             "HTML",
 					DisableWebPagePreview: false,
@@ -2298,7 +2334,7 @@ func inlineQueryHandler(c *integram.Context) error {
 						Type:        "article",
 						Title:       lists[li].Name + " • " + boards[bi].Name,
 						Description: c.InlineQuery.Query,
-						ThumbURL:    "https://1153359166.rsc.cdn77.org/t/new_" + boards[bi].Prefs.Background + ".png",
+						ThumbURL:    "https://st.integram.org/trello/new_" + boards[bi].Prefs.Background + ".png",
 						InputMessageContent: tg.InputTextMessageContent{
 							ParseMode:             "HTML",
 							DisableWebPagePreview: false,
@@ -2314,7 +2350,7 @@ func inlineQueryHandler(c *integram.Context) error {
 			}
 		}
 	}
-	return c.AnswerInlineQueryWithResults(res, 60, true,"")
+	return c.AnswerInlineQueryWithResults(res, 10, true,"")
 }
 func newMessageHandler(c *integram.Context) error {
 	u, _ := iurl.Parse("https://trello.com")

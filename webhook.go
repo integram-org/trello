@@ -296,6 +296,10 @@ func webhookHandler(c *integram.Context, wc *integram.WebhookContext) (err error
 	}
 
 	switch wh.Action.Type {
+	case "addMemberToBoard", "addAdminToBoard":
+		c.SetServiceCache("members_"+wh.Model.ID, nil, time.Second)
+	case "createBoard", "copyBoard":
+		c.User.SetCache("boards", nil, time.Second)
 	case "copyCard":
 
 		if !bs.Filter.CardCreated {
@@ -325,8 +329,41 @@ func webhookHandler(c *integram.Context, wc *integram.WebhookContext) (err error
 			SetCallbackAction(inlineCardButtonPressed, card.Id).
 			Send()
 
-	case "createCard":
+	case "addLabelToCard", "removeLabelFromCard":
+		var a string
+		if wh.Action.Type == "removeLabelFromCard" {
+			a = "removes"
+			err = c.UpdateServiceCache("card_"+card.Id, bson.M{"$pull": bson.M{"val.labels": wh.Action.Data.Label}}, card)
+			if err != nil {
+				log.WithError(err).Error("Error when trying to UpdateServiceCache")
+			}
+		} else {
+			a = "adds"
 
+			err = c.UpdateServiceCache("card_"+card.Id, bson.M{"$addToSet": bson.M{"val.labels": wh.Action.Data.Label}}, card)
+			if err != nil {
+				log.WithError(err).Error("Error when trying to UpdateServiceCache")
+			}
+		}
+
+		if cardMsg != nil {
+			updateCardMessages(c, wc, card)
+			if cardMsgJustPosted {
+				return
+			}
+		}
+
+
+		if !bs.Filter.Labeled {
+			return
+		}
+		msg.SetTextFmt("%s %s label %s %s ", mention(c, byMember), a, colorEmoji(wh.Action.Data.Label.Color), m.Bold(wh.Action.Data.Label.Name))
+
+	case "createCard":
+		card.MemberCreator = byMember
+		card.Pos = float64(wh.Action.Date.Unix())
+
+		storeCard(c, card)
 		if !bs.Filter.CardCreated {
 			return
 		}
@@ -334,10 +371,6 @@ func webhookHandler(c *integram.Context, wc *integram.WebhookContext) (err error
 		if cardMsgJustPosted {
 			return
 		}
-		card.MemberCreator = byMember
-		card.Pos = float64(wh.Action.Date.Unix())
-
-		storeCard(c, card)
 
 		return msg.SetText(cardText(c, card)).
 			AddEventID("card_"+card.Id). // save initial card message to reply them in case of card-related actions
@@ -354,7 +387,7 @@ func webhookHandler(c *integram.Context, wc *integram.WebhookContext) (err error
 
 		// make a comment to reply original card message
 		if cardMsg != nil {
-			msg.SetText("💬 "+mention(c, byMember)+": "+wh.Action.Data.Text).
+			msg.SetText("💬 "+mention(c, byMember)+": "+m.EncodeEntities(wh.Action.Data.Text)).
 				EnableHTML().
 				SetReplyAction(cardReplied, card.Id).
 				Send()
@@ -363,7 +396,7 @@ func webhookHandler(c *integram.Context, wc *integram.WebhookContext) (err error
 
 		wp := c.WebPreview(mention(c, card.MemberCreator), card.Board.Name+" • "+card.List.Name, card.Name, card.URL(), "")
 
-		return msg.SetText("💬 "+mention(c, byMember)+": "+wh.Action.Data.Text+" "+m.URL("↗️", wp)).
+		return msg.SetText("💬 "+mention(c, byMember)+": "+m.EncodeEntities(wh.Action.Data.Text)+" "+m.URL("↗️", wp)).
 			EnableHTML().
 			SetReplyAction(cardReplied, card.Id).
 			Send()
@@ -742,7 +775,7 @@ func attachFileToCard(c *integram.Context, cardID string, doc tg.Document) error
 		return err
 	}
 
-	c.Service().SheduleJob(removeFile, 0, time.Now().Add(time.Hour), fileLocalPath)
+	c.Service().SheduleJob(removeFile, 0, time.Now().Add(time.Second*60), fileLocalPath)
 
 	var a action
 	err = json.Unmarshal(b, &a)
@@ -762,7 +795,7 @@ func commentCard(c *integram.Context, cardID string, text string) error {
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid token") {
 			authWasRevokedMessage(c)
-			c.User.SetAfterAuthAction(commentCard, c, cardID, text)
+			c.User.SetAfterAuthAction(commentCard, cardID, text)
 			return nil
 		}
 		return err
